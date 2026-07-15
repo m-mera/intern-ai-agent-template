@@ -2,101 +2,288 @@ import os
 import json
 import requests
 
-API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
-MODEL_NAME = os.getenv("AZURE_OPENAI_MODEL")
+# ============================================================
+# Azure OpenAI APIの設定
+# ============================================================
+# APIキー、エンドポイント、モデル名はコードに直接書かず、
+# GitHub Codespaces Secretから環境変数として読み込みます。
+#
+# Codespaces Secretに以下の3つを登録しておく必要があります。
+#
+# AZURE_OPENAI_API_KEY   : Azure OpenAIのAPIキー
+# AZURE_OPENAI_ENDPOINT  : Azure OpenAIのエンドポイントURL
+# AZURE_OPENAI_MODEL     : 使用するモデル名またはデプロイ名
+#
+# 例:
+# AZURE_OPENAI_MODEL = gpt-5.6-sol
+#
+# 注意:
+# APIキーをmain.pyに直接書くと、GitHubに公開してしまう危険があります。
+# そのため、このコードでは os.environ で環境変数から取得しています。
+# ============================================================
 
-if not API_KEY:
-    raise ValueError(
-        "AZURE_OPENAI_API_KEY が設定されていません。Codespaces Secretを確認してください。"
-    )
+API_KEY = os.environ["AZURE_OPENAI_API_KEY"]
+ENDPOINT = os.environ["AZURE_OPENAI_ENDPOINT"]
+MODEL_NAME = os.environ["AZURE_OPENAI_MODEL"]
 
-if not ENDPOINT:
-    raise ValueError(
-        "AZURE_OPENAI_ENDPOINT が設定されていません。Codespaces Secretを確認してください。"
-    )
 
-if not MODEL_NAME:
-    raise ValueError(
-        "AZURE_OPENAI_MODEL が設定されていません。Codespaces Secretを確認してください。"
-    )
+# ============================================================
+# HTTPリクエストのヘッダー設定
+# ============================================================
+# headersは、Azure OpenAI APIへリクエストを送るときの付加情報です。
+#
+# Content-Type:
+#   送信するデータ形式がJSONであることを表します。
+#
+# api-key:
+#   Azure OpenAIを利用するための認証情報です。
+#   API_KEYには、Codespaces Secretから取得した値が入ります。
+# ============================================================
 
 headers = {
     "Content-Type": "application/json",
     "api-key": API_KEY,
 }
 
+
+# ============================================================
+# 【カスタマイズする場所】
+# AIエージェントの役割・目的・回答ルール
+# ============================================================
+# ここを書き換えることで、自分だけのAIエージェントを作れます。
+#
+# 変更してよい項目:
+#   - エージェント名
+#   - 開発理由
+#   - 想定しているユーザー
+#   - できること
+#   - 回答ルール
+#   - 好みや性格
+#
+# 例:
+#   「勉強を助けるAI」
+#   「旅行計画を考えるAI」
+#   「献立を提案するAI」
+#   「就活相談に乗るAI」
+#
+# 注意:
+#   APIキー、ENDPOINT、MODEL_NAMEは変更しないでください。
+#   基本的に学生が変更するのは、この INSTRUCTIONS の中です。
+# ============================================================
+
 INSTRUCTIONS = """
 あなたはHealthy Life Agentです。
 
-# 目的
-毎日の生活を少しでも健康的にしたい人を支援する。
+# エージェント名
+Healthy Life Agent
 
-# 対象
+# 開発理由
+毎日の生活を少しでも健康的にしたい人を支援するために開発されました。
+
+# 想定しているユーザー
 健康を意識したい学生
 
 # できること
-- 睡眠改善
-- 食生活改善
-- 運動習慣改善
-- 健康管理のアドバイス
+- 睡眠改善のアドバイス
+- 食生活改善のアドバイス
+- 運動習慣改善のアドバイス
+- 健康管理に関する相談対応
 
 # 回答ルール
 - 分かりやすい日本語で回答する
 - 学生でも実践しやすい内容を提案する
-- できるだけ手軽に始められる内容にする
+- できるだけ手軽に始められる方法を紹介する
+- 必要以上に専門用語を使わない
 - 医療的な診断はしない
 - 強い症状や体調不良がある場合は、医療機関への相談を促す
+- 質問内容が健康と直接関係ない場合でも、可能な範囲で生活習慣や健康と関連づけて回答する
+
+# 私の好み・特徴
+- じゃがりこが好きです
+- 前向きで親しみやすい口調で回答します
 """
 
 
+# ============================================================
+# AIの回答文を取り出す関数
+# ============================================================
+# Azure OpenAIのResponses APIから返ってくるデータは、
+# Pythonの辞書型に変換すると、次のような構造になります。
+#
+# response_json
+#   └─ output
+#       └─ message
+#           └─ content
+#               └─ output_text
+#
+# ただし、APIの返却形式は状況によって少し変わる可能性があります。
+# そのため、固定で
+#
+# response_json["output"][0]["content"][0]["text"]
+#
+# のように取り出すと、エラーになることがあります。
+#
+# この関数では、outputの中を順番に確認し、
+# type が output_text のものを探して、回答文だけを取り出します。
+# ============================================================
+
+
 def extract_assistant_message(response_json):
+    # AIの回答文を入れるための空文字
     assistant_message = ""
 
+    # response_json の中に "output" があれば取り出す
+    # なければ空のリスト [] として扱う
     for item in response_json.get("output", []):
+
+        # outputの中で、type が "message" のものだけを対象にする
         if item.get("type") == "message":
+
+            # message の中にある content を順番に確認する
             for content in item.get("content", []):
+
+                # content の type が "output_text" の場合、
+                # そこにAIの回答文が入っている
                 if content.get("type") == "output_text":
+
+                    # text の中身を assistant_message に追加する
                     assistant_message += content.get("text", "")
 
+    # 取り出した回答文を返す
     return assistant_message
 
 
+# ============================================================
+# ユーザーの入力をAzure OpenAIへ送信し、回答を取得する関数
+# ============================================================
+# この関数では、以下の流れで処理を行います。
+#
+# 1. ユーザーの入力を受け取る
+# 2. Azure OpenAI APIへ送るデータを作る
+# 3. requests.post でAPIへ送信する
+# 4. APIから返ってきたJSONを受け取る
+# 5. AIの回答文だけを取り出す
+# 6. 回答文を返す
+# ============================================================
+
+
 def get_response(message):
+    # ========================================================
+    # Azure OpenAIへ送信するデータ
+    # ========================================================
+    # model:
+    #   使用するモデル名またはデプロイ名です。
+    #   Codespaces Secretの AZURE_OPENAI_MODEL から取得しています。
+    #
+    # instructions:
+    #   AIに与える役割や回答ルールです。
+    #   学生がカスタマイズする主な場所です。
+    #
+    # input:
+    #   ユーザーが入力したメッセージです。
+    # ========================================================
+
     payload = {"model": MODEL_NAME, "instructions": INSTRUCTIONS, "input": message}
 
     try:
+        # ====================================================
+        # Azure OpenAI APIへリクエストを送信
+        # ====================================================
+        # requests.post は、指定したURLにデータを送る処理です。
+        #
+        # ENDPOINT:
+        #   Azure OpenAIの接続先URL
+        #
+        # headers:
+        #   APIキーなどの認証情報
+        #
+        # json:
+        #   Azure OpenAIへ送る本文
+        #
+        # timeout:
+        #   最大30秒待つ設定です。
+        #   応答が返ってこない場合、ずっと止まらないようにします。
+        # ====================================================
+
         response = requests.post(ENDPOINT, headers=headers, json=payload, timeout=30)
 
+        # HTTPステータスコードがエラーの場合、例外を発生させる
+        # 例:
+        #   400: リクエスト内容が不正
+        #   401: 認証エラー
+        #   404: モデルやエンドポイントが見つからない
+        #   500: サーバー側のエラー
         response.raise_for_status()
 
     except requests.RequestException as e:
+        # ====================================================
+        # API通信でエラーが起きた場合の処理
+        # ====================================================
+        # 例:
+        #   APIキーが間違っている
+        #   エンドポイントが間違っている
+        #   モデル名が間違っている
+        #   ネットワークの問題がある
+        # ====================================================
+
         error_body = ""
 
+        # response が存在する場合は、Azure側から返ってきた詳細も表示する
         if "response" in locals():
             error_body = response.text
 
         return f"エラーが発生しました: {e}\n{error_body}"
 
+    # ========================================================
+    # APIのレスポンスをJSONとして取得
+    # ========================================================
+    # response.json() によって、Azure OpenAIから返ってきたJSONを
+    # Pythonの辞書型として扱えるようにします。
+    # ========================================================
+
     response_json = response.json()
 
+    # AIの回答文だけを取り出す
     assistant_message = extract_assistant_message(response_json)
 
+    # 回答文を取り出せなかった場合、レスポンス全体を表示する
+    # これはデバッグ用です。
     if assistant_message == "":
         return "回答文を取得できませんでした。レスポンス内容:\n" + json.dumps(
             response_json, indent=2, ensure_ascii=False
         )
 
+    # 取り出した回答文を返す
     return assistant_message
 
 
+# ============================================================
+# メイン処理
+# ============================================================
+# この部分は、プログラムを実行したときに最初に動く処理です。
+#
+# ターミナルで
+#
+# python main.py
+#
+# と実行すると、この処理が開始されます。
+#
+# while True によって、ユーザーが exit または quit と入力するまで、
+# 会話を繰り返します。
+# ============================================================
+
 if __name__ == "__main__":
-    print("Healthy Life Agent を開始します。終了する場合は exit と入力してください。")
+    print("Healthy Life Agent を開始します。")
+    print("終了する場合は exit または quit と入力してください。")
 
     while True:
+        # ユーザーからの入力を受け取る
         user_input = input("You: ")
 
+        # exit または quit と入力されたら、プログラムを終了する
         if user_input.lower() in ["exit", "quit"]:
+            print("終了します。")
             break
 
+        # ユーザーの入力をAIへ送り、返ってきた回答を表示する
         print("AI Assistant:", get_response(user_input))
