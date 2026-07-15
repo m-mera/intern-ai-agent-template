@@ -3,29 +3,42 @@ import json
 import requests
 
 # ============================================================
-# Azure OpenAI APIの設定
+# 【学生が最初に設定する場所】
 # ============================================================
-# APIキー、エンドポイント、モデル名はコードに直接書かず、
-# GitHub Codespaces Secretから環境変数として読み込みます。
+# 当日講師から共有された値を貼り付けてください。
 #
-# Codespaces Secretに以下の3つを登録しておく必要があります。
+# API_KEY
+#   Azure OpenAIへ接続するための認証情報
 #
-# AZURE_OPENAI_API_KEY   : Azure OpenAIのAPIキー
-# AZURE_OPENAI_ENDPOINT  : Azure OpenAIのエンドポイントURL
-# AZURE_OPENAI_MODEL     : 使用するモデル名またはデプロイ名
+# ENDPOINT
+#   Azure OpenAIの接続先URL
 #
-# 例:
-# AZURE_OPENAI_MODEL = gpt-5.6-sol
+# MODEL_NAME
+#   使用するモデル名
 #
-# 注意:
-# APIキーをmain.pyに直接書くと、GitHubに公開してしまう危険があります。
-# そのため、このコードでは os.environ で環境変数から取得しています。
+# ※ この3項目以外は変更しなくても動作します。
 # ============================================================
 
-API_KEY = os.environ["AZURE_OPENAI_API_KEY"]
-ENDPOINT = os.environ["AZURE_OPENAI_ENDPOINT"]
-MODEL_NAME = os.environ["AZURE_OPENAI_MODEL"]
+API_KEY = ""
+ENDPOINT = ""
+MODEL_NAME = "gpt-5.6-sol"
 
+# ============================================================
+# 入力チェック
+# ============================================================
+# API_KEYやENDPOINTが未入力のまま実行された場合、
+# 分かりやすいエラーメッセージを表示します。
+# ============================================================
+
+if API_KEY == "":
+    raise ValueError(
+        "API_KEYが設定されていません。講師から共有されたAPIキーを入力してください。"
+    )
+
+if ENDPOINT == "":
+    raise ValueError(
+        "ENDPOINTが設定されていません。講師から共有されたエンドポイントを入力してください。"
+    )
 
 # ============================================================
 # HTTPリクエストのヘッダー設定
@@ -273,7 +286,6 @@ def get_response(message):
 # ============================================================
 
 if __name__ == "__main__":
-    print("Healthy Life Agent を開始します。")
     print("終了する場合は exit または quit と入力してください。")
 
     while True:
