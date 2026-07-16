@@ -21,7 +21,7 @@ import requests
 
 API_KEY = ""
 ENDPOINT = ""
-MODEL_NAME = "gpt-5.6-sol"
+MODEL_NAME = "gpt-4.1-mini"
 
 # ============================================================
 # 入力チェック
